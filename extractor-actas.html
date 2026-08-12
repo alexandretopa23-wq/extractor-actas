@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Extractor de Actas — PDF a Excel</title>
 
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000a1e">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Extractor Actas">
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -124,10 +133,15 @@
   </header>
 
   <!-- Status chip -->
-  <div class="flex justify-center">
+  <div class="flex flex-wrap justify-center items-center gap-2">
     <span id="globalStatus" class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-outline-variant bg-surface-container-lowest text-body-sm text-on-surface-variant">
       0 documentos cargados
     </span>
+    <button id="installBtn" hidden
+      class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-on-primary text-body-sm font-semibold hover:brightness-125 active:opacity-80 transition-all">
+      <span class="material-symbols-outlined" style="font-size:16px;">install_mobile</span>
+      Instalar app
+    </button>
   </div>
 
   <!-- Dropzone -->
@@ -493,6 +507,35 @@ exportBtn.addEventListener('click', () => {
   XLSX.utils.book_append_sheet(wb, ws, 'FUID');
   const stamp = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `FUID_inventario_${stamp}.xlsx`);
+});
+
+// --- Instalación como app (PWA) ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
+}
+
+const installBtn = document.getElementById('installBtn');
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn.hidden = false;
+});
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  installBtn.hidden = true;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+});
+
+window.addEventListener('appinstalled', () => {
+  installBtn.hidden = true;
+  deferredInstallPrompt = null;
 });
 </script>
 </body>

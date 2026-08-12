@@ -1,0 +1,17 @@
+{
+  "name": "Extractor de Actas — PDF a Excel",
+  "short_name": "Extractor Actas",
+  "description": "Carga de PDFs/Word, extracción automática de campos FUID y exportación a Excel.",
+  "start_url": "./extractor-actas.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f9fc",
+  "theme_color": "#000a1e",
+  "lang": "es",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
