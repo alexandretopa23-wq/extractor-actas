@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Extractor de Actas — PDF a Excel</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap">
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#000a1e",
+          "primary-container": "#002147",
+          "on-primary": "#ffffff",
+          "on-primary-container": "#708ab5",
+          "on-primary-fixed-variant": "#2d476f",
+          "tertiary": "#735c00",
+          "tertiary-container": "#cca830",
+          "tertiary-fixed-dim": "#e9c349",
+          "on-tertiary": "#ffffff",
+          "on-tertiary-container": "#4f3e00",
+          "on-tertiary-fixed-variant": "#574500",
+          "secondary": "#5a632e",
+          "secondary-container": "#dce5a3",
+          "on-secondary": "#ffffff",
+          "on-secondary-container": "#5f6732",
+          "error": "#ba1a1a",
+          "error-container": "#ffdad6",
+          "on-error": "#ffffff",
+          "on-error-container": "#93000a",
+          "background": "#f7f9fc",
+          "surface": "#f7f9fc",
+          "surface-bright": "#f7f9fc",
+          "surface-dim": "#d8dadd",
+          "surface-container-lowest": "#ffffff",
+          "surface-container-low": "#f2f4f7",
+          "surface-container": "#eceef1",
+          "surface-container-high": "#e6e8eb",
+          "surface-container-highest": "#e0e3e6",
+          "surface-variant": "#e0e3e6",
+          "on-surface": "#191c1e",
+          "on-surface-variant": "#44474e",
+          "on-background": "#191c1e",
+          "outline": "#74777f",
+          "outline-variant": "#c4c6cf",
+          "inverse-surface": "#2d3133",
+          "inverse-on-surface": "#eff1f4"
+        },
+        borderRadius: { "DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px" },
+        spacing: { "base": "4px", "gutter": "16px", "xs": "8px", "sm": "12px", "md": "16px", "lg": "24px", "xl": "32px" },
+        fontFamily: { "sans": ["Inter", "system-ui", "sans-serif"] },
+        fontSize: {
+          "h1": ["28px", { lineHeight: "34px", letterSpacing: "-0.01em", fontWeight: "700" }],
+          "h1-mobile": ["22px", { lineHeight: "28px", fontWeight: "700" }],
+          "h2": ["20px", { lineHeight: "26px", fontWeight: "600" }],
+          "body-lg": ["18px", { lineHeight: "27px", fontWeight: "400" }],
+          "body-md": ["15px", { lineHeight: "22px", fontWeight: "400" }],
+          "body-sm": ["13px", { lineHeight: "18px", fontWeight: "400" }],
+          "label-caps": ["11px", { lineHeight: "14px", letterSpacing: "0.06em", fontWeight: "700" }],
+          "data-mono": ["13px", { lineHeight: "18px", letterSpacing: "0.02em", fontWeight: "500" }]
+        }
+      }
+    }
+  };
+</script>
+
+<style>
+  .material-symbols-outlined{ font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; vertical-align:middle; }
+  [data-weight="fill"]{ font-variation-settings:'FILL' 1; }
+
+  .tactical-bg{
+    background-image:
+      linear-gradient(to right, rgba(116,119,127,0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(116,119,127,0.06) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .dropzone{ transition: border-color .15s, background-color .15s; }
+  .dropzone.drag{ border-color:#cca830; background:#fdf8ec; }
+
+  td[contenteditable=true]{ outline:none; }
+  td[contenteditable=true]:focus{ background:#f2f4f7; box-shadow: inset 0 0 0 2px #002147; }
+
+  .tag{ display:inline-block; padding:2px 10px; border-radius:9999px; font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; white-space:nowrap; }
+  .tag.ok{ background:#dce5a3; color:#3c4a12; }
+  .tag.warn{ background:#ffe088; color:#4f3e00; }
+
+  .del{ color:#ba1a1a; cursor:pointer; font-weight:700; text-align:center; }
+
+  #dataTable{ border-collapse:collapse; width:100%; min-width:1100px; }
+  #dataTable th{ position:sticky; top:0; background:#eceef1; color:#44474e; text-align:left; padding:10px 12px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; border-bottom:1px solid #c4c6cf; white-space:nowrap; }
+  #dataTable td{ padding:8px 10px; border-bottom:1px solid #c4c6cf; vertical-align:top; font-size:13px; color:#191c1e; }
+  #dataTable tr:hover td{ background:#f7f9fc; }
+  .table-wrap{ max-height:60vh; overflow:auto; border:1px solid #c4c6cf; border-radius:0.5rem; }
+  .empty{ color:#74777f; text-align:center; padding:40px; font-size:13px; }
+</style>
+</head>
+
+<body class="bg-background text-on-background antialiased min-h-screen font-sans tactical-bg">
+
+<div class="max-w-3xl mx-auto w-full px-4 py-6 md:px-8 md:py-10 space-y-lg">
+
+  <!-- Header -->
+  <header class="flex items-start gap-4">
+    <div class="w-11 h-11 shrink-0 rounded-lg bg-primary text-on-primary flex items-center justify-center">
+      <span class="material-symbols-outlined" style="font-size:24px;">account_balance</span>
+    </div>
+    <div class="min-w-0">
+      <h1 class="text-h1-mobile md:text-h1 text-primary">Extractor de Actas — PDF a Excel</h1>
+      <p class="text-body-sm text-on-surface-variant mt-1">
+        Carga de PDFs · extracción automática (N° acta, folios, asunto, fecha) · preview editable · exportación .xlsx
+      </p>
+    </div>
+  </header>
+
+  <!-- Status chip -->
+  <div class="flex justify-center">
+    <span id="globalStatus" class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-outline-variant bg-surface-container-lowest text-body-sm text-on-surface-variant">
+      0 documentos cargados
+    </span>
+  </div>
+
+  <!-- Dropzone -->
+  <div id="dropzone" class="dropzone border-2 border-dashed border-outline-variant rounded-xl bg-surface-container-lowest px-6 py-10 text-center cursor-pointer">
+    <div class="flex justify-center mb-3">
+      <span class="material-symbols-outlined text-outline" style="font-size:40px;">cloud_upload</span>
+    </div>
+    <p class="text-h2 text-tertiary-container font-bold">Toca o arrastra tus PDFs aquí</p>
+    <p class="text-body-sm text-on-surface-variant mt-2 max-w-sm mx-auto">
+      PDFs con texto nativo, PDFs escaneados (OCR automático) y documentos Word · todo se procesa localmente en tu navegador
+    </p>
+    <input type="file" id="fileInput" accept="application/pdf,.docx" multiple class="hidden">
+  </div>
+
+  <p class="text-body-sm text-on-surface-variant">
+    Campos detectados por patrón de texto: <strong class="text-on-surface">N° de Acta, Fecha, Asunto, Folios (páginas)</strong>.
+    Todos son editables antes de exportar. Si un PDF no tiene texto seleccionable, se activa OCR automáticamente (más lento, se indica en el estado de progreso).
+  </p>
+
+  <!-- Config card -->
+  <div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 md:p-5 space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-label-caps text-on-surface-variant uppercase mb-1.5">Código Serie/Subserie por defecto</label>
+        <input id="defaultCodigo" placeholder="Ej: 5.13.2.2.73"
+          class="w-full bg-surface-container-low border border-outline-variant text-on-surface placeholder:text-outline rounded-lg px-3 py-2.5 text-body-sm focus:outline-none focus:ring-2 focus:ring-primary">
+      </div>
+      <div>
+        <label class="block text-label-caps text-on-surface-variant uppercase mb-1.5">N° de Caja por defecto</label>
+        <input id="defaultCaja" placeholder="1"
+          class="w-full bg-surface-container-low border border-outline-variant text-on-surface placeholder:text-outline rounded-lg px-3 py-2.5 text-body-sm focus:outline-none focus:ring-2 focus:ring-primary">
+      </div>
+    </div>
+
+    <button id="clearBtn" disabled
+      class="w-full flex items-center justify-center gap-2 bg-surface-container-high text-on-surface-variant border border-outline-variant font-label-caps text-label-caps uppercase px-4 py-3 rounded-lg hover:bg-surface-container-highest active:opacity-80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+      <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+      Vaciar tabla
+    </button>
+
+    <button id="exportBtn" disabled
+      class="w-full flex items-center justify-center gap-2 bg-tertiary-container text-on-tertiary-container font-label-caps text-label-caps uppercase px-4 py-3 rounded-lg hover:brightness-95 active:opacity-80 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+      <span class="material-symbols-outlined" style="font-size:18px;">download</span>
+      Exportar a Excel FUID (.xlsx)
+    </button>
+
+    <p id="processStatus" class="text-body-sm text-on-surface-variant min-h-[18px]"></p>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap bg-surface-container-lowest">
+    <table id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:26px;"></th>
+          <th>N° Orden</th>
+          <th>Código</th>
+          <th>Asunto</th>
+          <th>Fecha Inicial</th>
+          <th>Fecha Final</th>
+          <th>Caja</th>
+          <th>Carpeta</th>
+          <th>Tomo</th>
+          <th>Otro</th>
+          <th>Folios</th>
+          <th>Soporte</th>
+          <th>Frec. Consulta</th>
+          <th>Notas</th>
+          <th>Confianza</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="15" class="empty">Aún no has cargado ningún PDF o Word.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <footer class="border-t border-outline-variant pt-6 pb-4 text-center space-y-2">
+    <p class="text-body-sm text-on-surface-variant font-semibold">MINISTERIO DE DEFENSA NACIONAL - COLOMBIA © 2026</p>
+    <div class="flex justify-center gap-4 text-body-sm text-on-surface-variant">
+      <a href="#" class="hover:text-primary hover:underline">Privacidad</a>
+      <a href="#" class="hover:text-primary hover:underline">Términos de Uso</a>
+      <a href="#" class="hover:text-primary hover:underline">Soporte Técnico</a>
+    </div>
+    <p class="text-body-sm text-on-surface-variant pt-2">
+      Arquitectura de datos y diseño lógico: Cabo II María Fernanda Rodríguez Mantilla.<br>
+      Implementación técnica automatizada vía Claude Code.
+    </p>
+  </footer>
+
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let rows = []; // {orden, codigo, asunto, fechaIni, fechaFin, caja, carpeta, tomo, otro, folios, soporte, frecuencia, notas, confidence, file}
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const tbody = document.getElementById('tbody');
+const exportBtn = document.getElementById('exportBtn');
+const clearBtn = document.getElementById('clearBtn');
+const processStatus = document.getElementById('processStatus');
+const globalStatus = document.getElementById('globalStatus');
+const defaultCodigo = document.getElementById('defaultCodigo');
+const defaultCaja = document.getElementById('defaultCaja');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+async function handleFiles(fileList){
+  const files = Array.from(fileList).filter(f =>
+    f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.docx')
+  );
+  if(!files.length) return;
+  processStatus.textContent = `Procesando 0/${files.length}...`;
+  for(let i=0;i<files.length;i++){
+    const f = files[i];
+    try{
+      const isDocx = f.name.toLowerCase().endsWith('.docx');
+      const result = isDocx
+        ? await extractFromDocx(f)
+        : await extractFromPDF(f, (msg) => { processStatus.textContent = `(${i+1}/${files.length}) ${f.name}: ${msg}`; });
+      rows.push(result);
+    }catch(err){
+      rows.push({file:f.name, acta:'', fecha:'', asunto:'', folios:'', confidence:'error', error:String(err)});
+    }
+    processStatus.textContent = `Procesando ${i+1}/${files.length}...`;
+    renderTable();
+  }
+  processStatus.textContent = `Completado: ${files.length} archivo(s) procesado(s).`;
+  globalStatus.textContent = `${rows.length} documentos cargados`;
+  exportBtn.disabled = rows.length === 0;
+  clearBtn.disabled = rows.length === 0;
+}
+
+function buildAsunto(text){
+  // Detecta tipo de documento + número + fragmento descriptivo, replicando el estilo
+  // "Acta de reunión No. XXXX ... descripción" que exige la columna Asunto del FUID.
+  const tipoMatch = text.match(/(Acta(?:\s+de\s+\w+)?|Circular|Informe(?:\s+de\s+\w+)?|Plan(?:\s+de\s+\w+)?|Planilla)[^\n]{0,15}?N[°ºo\.]*\s*[:\-]?\s*([0-9]{4,20})/i);
+  let asunto = '';
+  if(tipoMatch){
+    const startIdx = text.indexOf(tipoMatch[0]);
+    asunto = text.substring(startIdx, startIdx + 260).replace(/\s+/g,' ').trim();
+  } else {
+    // Fallback: buscar línea con "Asunto:" o primeros 200 caracteres útiles
+    const asuntoLine = text.match(/asunto\s*[:\-]\s*(.{5,200}?)(?:\n|$)/i);
+    asunto = asuntoLine ? asuntoLine[1].trim() : text.replace(/\s+/g,' ').trim().slice(0,200);
+  }
+  return asunto;
+}
+
+function extractDate(text){
+  const m = matchFirst(text, [
+    /fecha\s*[:\-]?\s*([0-3]?[0-9][\/\-][01]?[0-9][\/\-]\d{2,4})/i,
+    /([0-3]?[0-9]\s+de\s+[a-záéíóú]+\s+de\s+\d{4})/i,
+    /(\d{4}[\/\-][01]?[0-9][\/\-][0-3]?[0-9])/
+  ]);
+  return normalizeDate(m);
+}
+
+function normalizeDate(raw){
+  if(!raw) return '';
+  // Intenta normalizar a aaaa-mm-dd; si no reconoce el formato, devuelve el texto crudo para edición manual
+  let m = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    let yr = m[3].length === 2 ? '20'+m[3] : m[3];
+    return `${yr}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  return raw;
+}
+
+async function extractFromPDF(file, onProgress){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const numPages = pdf.numPages;
+
+  let fullText = '';
+  let usedOCR = false;
+  const pagesToScan = Math.min(numPages, 3);
+  for(let p=1;p<=pagesToScan;p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(it => it.str).join(' ');
+
+    if(pageText.trim().length > 15){
+      fullText += pageText + '\n';
+    } else {
+      onProgress && onProgress(`OCR página ${p}/${pagesToScan}...`);
+      usedOCR = true;
+      const viewport = page.getViewport({scale: 2});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({canvasContext: ctx, viewport}).promise;
+      const { data: { text } } = await Tesseract.recognize(canvas, 'spa');
+      fullText += text + '\n';
+    }
+  }
+
+  const asunto = buildAsunto(fullText);
+  const fecha = extractDate(fullText);
+
+  let confidence = usedOCR ? 'warn' : 'ok';
+  if(!asunto || !fecha) confidence = 'warn';
+
+  return {
+    orden: '',
+    codigo: defaultCodigo.value.trim(),
+    asunto,
+    fechaIni: fecha,
+    fechaFin: fecha,
+    caja: defaultCaja.value.trim() || '1',
+    carpeta: '',
+    tomo: '',
+    otro: '',
+    folios: numPages,
+    soporte: 'Papel',
+    frecuencia: 'Media',
+    notas: usedOCR ? 'Extraído por OCR - verificar' : '',
+    confidence,
+    file: file.name + (usedOCR ? ' (OCR)' : '')
+  };
+}
+
+async function extractFromDocx(file){
+  const buf = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({arrayBuffer: buf});
+  const fullText = result.value || '';
+
+  const asunto = buildAsunto(fullText);
+  const fecha = extractDate(fullText);
+  const approxFolios = Math.max(1, Math.round(fullText.length / 2200));
+
+  let confidence = 'ok';
+  if(!asunto || !fecha) confidence = 'warn';
+
+  return {
+    orden: '',
+    codigo: defaultCodigo.value.trim(),
+    asunto,
+    fechaIni: fecha,
+    fechaFin: fecha,
+    caja: defaultCaja.value.trim() || '1',
+    carpeta: '',
+    tomo: '',
+    otro: '',
+    folios: approxFolios,
+    soporte: 'Papel',
+    frecuencia: 'Media',
+    notas: 'Folios aproximados (Word) - verificar',
+    confidence,
+    file: file.name
+  };
+}
+
+function matchFirst(text, patterns){
+  for(const re of patterns){
+    const m = text.match(re);
+    if(m && m[1]) return m[1].trim();
+  }
+  return '';
+}
+
+function renderTable(){
+  if(rows.length === 0){
+    tbody.innerHTML = '<tr><td colspan="15" class="empty">Aún no has cargado ningún PDF o Word.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((r,i) => `
+    <tr data-idx="${i}" title="${escapeHtml(r.file)}">
+      <td class="del" onclick="removeRow(${i})">✕</td>
+      <td>${i+1}</td>
+      <td contenteditable="true" data-field="codigo">${escapeHtml(r.codigo)}</td>
+      <td contenteditable="true" data-field="asunto" style="min-width:260px;">${escapeHtml(r.asunto)}</td>
+      <td contenteditable="true" data-field="fechaIni" style="width:90px;">${escapeHtml(r.fechaIni)}</td>
+      <td contenteditable="true" data-field="fechaFin" style="width:90px;">${escapeHtml(r.fechaFin)}</td>
+      <td contenteditable="true" data-field="caja" style="width:45px;">${escapeHtml(r.caja)}</td>
+      <td contenteditable="true" data-field="carpeta" style="width:55px;">${escapeHtml(r.carpeta)}</td>
+      <td contenteditable="true" data-field="tomo" style="width:45px;">${escapeHtml(r.tomo)}</td>
+      <td contenteditable="true" data-field="otro" style="width:45px;">${escapeHtml(r.otro)}</td>
+      <td contenteditable="true" data-field="folios" style="width:55px;">${escapeHtml(String(r.folios))}</td>
+      <td contenteditable="true" data-field="soporte" style="width:70px;">${escapeHtml(r.soporte)}</td>
+      <td contenteditable="true" data-field="frecuencia" style="width:70px;">${escapeHtml(r.frecuencia)}</td>
+      <td contenteditable="true" data-field="notas" style="width:120px;">${escapeHtml(r.notas)}</td>
+      <td>${r.confidence === 'ok' ? '<span class="tag ok">Completo</span>' : r.confidence === 'error' ? '<span class="tag warn">Error lectura</span>' : '<span class="tag warn">Revisar</span>'}</td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('td[contenteditable]').forEach(td => {
+    td.addEventListener('blur', () => {
+      const tr = td.closest('tr');
+      const idx = Number(tr.dataset.idx);
+      const field = td.dataset.field;
+      rows[idx][field] = td.textContent.trim();
+    });
+  });
+}
+
+function removeRow(i){
+  rows.splice(i,1);
+  renderTable();
+  globalStatus.textContent = `${rows.length} documentos cargados`;
+  exportBtn.disabled = rows.length === 0;
+  clearBtn.disabled = rows.length === 0;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+clearBtn.addEventListener('click', () => {
+  rows = [];
+  renderTable();
+  globalStatus.textContent = '0 documentos cargados';
+  processStatus.textContent = '';
+  exportBtn.disabled = true;
+  clearBtn.disabled = true;
+});
+
+exportBtn.addEventListener('click', () => {
+  // Encabezado institucional replicado según el FUID (filas 1-15), luego filas de datos, luego Total Folios
+  const headerRows = [
+    ['MINISTERIO DE DEFENSA NACIONAL / COMANDO GENERAL FUERZAS MILITARES / EJÉRCITO NACIONAL', '', '', '', 'FORMATO ÚNICO DE INVENTARIO DOCUMENTAL', '', '', '', '', '', '', '', 'Página: 1 de 1'],
+    [],
+    ['ENTIDAD PRODUCTORA:', '', '', '(completar)'],
+    ['UNIDAD ADMINISTRATIVA:', '', '', '(completar)'],
+    ['OFICINA PRODUCTORA:', '', '', '(completar)'],
+    ['OBJETO:', '', '', '(completar)'],
+    [],
+    ['NÚMERO DE ORDEN','CODIGO','Nombre de las Series, subseries o Asuntos','','FECHAS EXTREMAS (aaaa-mm-dd)','','UNIDAD DE CONSERVACIÓN','','','','Número de Folios','Soporte','Frecuencia de Consulta','Notas'],
+    ['','','','','Inicial','Final','Número de Caja','Número de Carpeta','Tomo','Otro','','','','']
+  ];
+
+  const dataRows = rows.map((r,i) => [
+    i+1, r.codigo, r.asunto, '', r.fechaIni, r.fechaFin, r.caja, r.carpeta, r.tomo, r.otro, r.folios, r.soporte, r.frecuencia, r.notas
+  ]);
+
+  const totalFolios = rows.reduce((sum,r) => sum + (parseInt(r.folios) || 0), 0);
+  const totalRow = ['', '', '', '', '', '', '', '', 'Total Folios', '', totalFolios, '', '', ''];
+
+  const wsData = [...headerRows, ...dataRows, [], totalRow];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [
+    {wch:9},{wch:14},{wch:55},{wch:4},{wch:12},{wch:12},{wch:8},{wch:8},{wch:6},{wch:6},{wch:9},{wch:9},{wch:12},{wch:22}
+  ];
+  ws['!merges'] = [
+    {s:{r:0,c:0},e:{r:0,c:3}}, {s:{r:0,c:4},e:{r:0,c:11}},
+    {s:{r:7,c:2},e:{r:7,c:3}}, {s:{r:7,c:4},e:{r:7,c:5}}, {s:{r:7,c:6},e:{r:7,c:9}}
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'FUID');
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `FUID_inventario_${stamp}.xlsx`);
+});
+</script>
+</body>
+</html>
