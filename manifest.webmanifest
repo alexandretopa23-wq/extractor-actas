@@ -1,5 +1,5 @@
 {
-  "name": "Extractor de Actas — PDF a Excel",
+  "name": "FUID DIGITAL",
   "short_name": "Extractor Actas",
   "description": "Carga de PDFs/Word, extracción automática de campos FUID y exportación a Excel.",
   "start_url": "./extractor-actas.html",
