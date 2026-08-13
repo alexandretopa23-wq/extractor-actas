@@ -105,6 +105,7 @@
   .tag.warn{ background:#ffe088; color:#4f3e00; }
 
   .del{ color:#ba1a1a; cursor:pointer; font-weight:700; text-align:center; }
+  .locked{ color:#c4c6cf; text-align:center; user-select:none; }
 
   .fuid-input{ background:#f2f4f7; border:1px solid #c4c6cf; color:#191c1e; padding:8px 10px; border-radius:0.5rem; font-size:13px; }
   .fuid-input:focus{ outline:none; box-shadow:0 0 0 2px #000a1e; }
@@ -268,8 +269,9 @@
           <th style="width:26px;"></th>
           <th>N° Orden</th>
           <th>Código</th>
-          <th>Serie/Subserie</th>
-          <th>Asunto</th>
+          <th>Serie</th>
+          <th>Tipo Documental</th>
+          <th>Asunto (con N° radicado)</th>
           <th>Fecha Inicial</th>
           <th>Fecha Final</th>
           <th>Caja</th>
@@ -284,7 +286,7 @@
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="16" class="empty">Aún no has cargado ningún PDF o Word.</td></tr>
+        <tr><td colspan="17" class="empty">Aún no has cargado ningún PDF o Word.</td></tr>
       </tbody>
     </table>
   </div>
@@ -446,6 +448,7 @@ async function extractFromPDF(file, onProgress){
     orden: '',
     codigo: defaultCodigo.value.trim(),
     serie: '',
+    subserie: '',
     asunto,
     fechaIni: fecha,
     fechaFin: fecha,
@@ -454,9 +457,9 @@ async function extractFromPDF(file, onProgress){
     tomo: '',
     otro: '',
     folios: numPages,
-    soporte: 'Papel',
+    soporte: '',
     frecuencia: 'Media',
-    notas: usedOCR ? 'Extraído por OCR - verificar' : '',
+    notas: '',
     confidence,
     file: file.name + (usedOCR ? ' (OCR)' : '')
   };
@@ -478,6 +481,7 @@ async function extractFromDocx(file){
     orden: '',
     codigo: defaultCodigo.value.trim(),
     serie: '',
+    subserie: '',
     asunto,
     fechaIni: fecha,
     fechaFin: fecha,
@@ -486,9 +490,9 @@ async function extractFromDocx(file){
     tomo: '',
     otro: '',
     folios: approxFolios,
-    soporte: 'Papel',
+    soporte: '',
     frecuencia: 'Media',
-    notas: 'Folios aproximados (Word) - verificar',
+    notas: '',
     confidence,
     file: file.name
   };
@@ -504,7 +508,7 @@ function matchFirst(text, patterns){
 
 function renderTable(){
   if(rows.length === 0){
-    tbody.innerHTML = '<tr><td colspan="16" class="empty">Aún no has cargado ningún PDF o Word.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" class="empty">Aún no has cargado ningún PDF o Word.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((r,i) => `
@@ -512,18 +516,19 @@ function renderTable(){
       <td class="del" onclick="removeRow(${i})">✕</td>
       <td>${i+1}</td>
       <td contenteditable="true" data-field="codigo">${escapeHtml(r.codigo)}</td>
-      <td contenteditable="true" data-field="serie" style="width:110px;" title="Nombre de la serie documental, ej: ACTAS. Se usa para agrupar filas en el Excel.">${escapeHtml(r.serie || '')}</td>
-      <td contenteditable="true" data-field="asunto" style="min-width:260px;">${escapeHtml(r.asunto)}</td>
+      <td contenteditable="true" data-field="serie" style="width:110px;" title="Nombre de la serie documental, ej: ACTAS. Se usa como nombre de hoja y para agrupar filas en el Excel.">${escapeHtml(r.serie || '')}</td>
+      <td contenteditable="true" data-field="subserie" style="width:160px;" title="Nombre del tipo documental/subserie, ej: Actas de Reuniones de trabajo. Agrupa los documentos individuales en la hoja FUID GENERAL.">${escapeHtml(r.subserie || '')}</td>
+      <td contenteditable="true" data-field="asunto" style="min-width:260px;" title="Debe incluir el N° de radicado, ej: Acta de reunión No. 2025571003449723 reunión de capacitación...">${escapeHtml(r.asunto)}</td>
       <td contenteditable="true" data-field="fechaIni" style="width:90px;">${escapeHtml(r.fechaIni)}</td>
       <td contenteditable="true" data-field="fechaFin" style="width:90px;">${escapeHtml(r.fechaFin)}</td>
       <td contenteditable="true" data-field="caja" style="width:45px;">${escapeHtml(r.caja)}</td>
       <td contenteditable="true" data-field="carpeta" style="width:55px;">${escapeHtml(r.carpeta)}</td>
-      <td contenteditable="true" data-field="tomo" style="width:45px;">${escapeHtml(r.tomo)}</td>
-      <td contenteditable="true" data-field="otro" style="width:45px;">${escapeHtml(r.otro)}</td>
+      <td class="locked" title="Siempre vacío en el FUID">—</td>
+      <td class="locked" title="Siempre vacío en el FUID">—</td>
       <td contenteditable="true" data-field="folios" style="width:55px;">${escapeHtml(String(r.folios))}</td>
-      <td contenteditable="true" data-field="soporte" style="width:70px;">${escapeHtml(r.soporte)}</td>
+      <td class="locked" title="Siempre vacío en el FUID">—</td>
       <td contenteditable="true" data-field="frecuencia" style="width:70px;">${escapeHtml(r.frecuencia)}</td>
-      <td contenteditable="true" data-field="notas" style="width:120px;">${escapeHtml(r.notas)}</td>
+      <td class="locked" title="Siempre vacío en el FUID">—</td>
       <td>${r.confidence === 'ok' ? '<span class="tag ok">Completo</span>' : r.confidence === 'error' ? '<span class="tag warn">Error lectura</span>' : '<span class="tag warn">Revisar</span>'}</td>
     </tr>
   `).join('');
@@ -587,74 +592,57 @@ function mergeSet(ws, r1, c1, r2, c2, value, opts={}){
   if(opts.fill) cell.fill = opts.fill;
 }
 
-exportBtn.addEventListener('click', async () => {
-  if(rows.length === 0) return;
-  exportBtn.disabled = true;
-  processStatus.textContent = 'Generando Excel FUID...';
+const SHEET_COLUMNS = [
+  {width:10},{width:14},{width:38},{width:12},{width:12},
+  {width:9},{width:10},{width:7},{width:7},{width:10},{width:10},{width:12},{width:22}
+];
 
-  const entidad = fEntidad.value.trim() || 'EJÉRCITO NACIONAL';
-  const unidad = fUnidad.value.trim();
-  const oficina = fOficina.value.trim();
-  const objeto = fObjeto.value.trim() || 'TRANSFERENCIA PRIMARIA';
-  const codigoFormato = fCodigoFormato.value.trim() || 'FO-SECEJ-CEAYG-742';
-  const version = fVersion.value.trim() || '0';
-  const fechaEmision = fFechaEmision.value.trim();
-  const hojaNo = fHojaNo.value.trim() || '1';
-  const hojaTotal = fHojaTotal.value.trim() || '1';
-  const ano = fAno.value.trim();
-  const mes = fMes.value.trim();
-  const dia = fDia.value.trim();
-  const nt = fNT.value.trim();
+function sanitizeSheetName(name){
+  return String(name).replace(/[:\\\/\?\*\[\]]/g, ' ').trim().slice(0, 31) || 'Hoja';
+}
 
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('FUID', { pageSetup: { orientation: 'landscape', fitToPage: true } });
-  ws.columns = [
-    {width:10},{width:14},{width:38},{width:12},{width:12},
-    {width:9},{width:10},{width:7},{width:7},{width:10},{width:10},{width:12},{width:22}
-  ];
+// Dibuja el bloque institucional + encabezado de tabla (filas 1-14), igual en todas las hojas del FUID.
+function drawFuidHeader(ws, cfg){
+  ws.columns = SHEET_COLUMNS;
 
-  // --- Bloque institucional (filas 1-4) ---
   mergeSet(ws, 1, 1, 4, 3,
-    'MINISTERIO DE DEFENSA NACIONAL\nCOMANDO GENERAL FUERZAS MILITARES\n' + entidad,
+    'MINISTERIO DE DEFENSA NACIONAL\nCOMANDO GENERAL FUERZAS MILITARES\n' + cfg.entidad,
     { bold:true, size:9, align:'left', valign:'middle' });
   mergeSet(ws, 1, 4, 4, 9,
     'FORMATO ÚNICO DE INVENTARIO DOCUMENTAL',
     { bold:true, size:14, align:'center', valign:'middle' });
-  mergeSet(ws, 1, 10, 1, 13, `Página: ${hojaNo} de ${hojaTotal}`, { size:9, align:'left' });
-  mergeSet(ws, 2, 10, 2, 13, `Código: ${codigoFormato}`, { size:9, align:'left' });
-  mergeSet(ws, 3, 10, 3, 13, `Versión: ${version}`, { size:9, align:'left' });
-  mergeSet(ws, 4, 10, 4, 13, `Fecha de emisión: ${fechaEmision}`, { size:9, align:'left' });
+  mergeSet(ws, 1, 10, 1, 13, `Página: ${cfg.hojaNo} de ${cfg.hojaTotal}`, { size:9, align:'left' });
+  mergeSet(ws, 2, 10, 2, 13, `Código: ${cfg.codigoFormato}`, { size:9, align:'left' });
+  mergeSet(ws, 3, 10, 3, 13, `Versión: ${cfg.version}`, { size:9, align:'left' });
+  mergeSet(ws, 4, 10, 4, 13, `Fecha de emisión: ${cfg.fechaEmision}`, { size:9, align:'left' });
   borderRange(ws, 1, 1, 4, 13);
 
-  // --- Hoja No. ---
-  mergeSet(ws, 6, 1, 6, 13, `HOJA No.        ${hojaNo}        DE        ${hojaTotal}`, { bold:true, size:10, align:'center' });
+  mergeSet(ws, 6, 1, 6, 13, `HOJA No.        ${cfg.hojaNo}        DE        ${cfg.hojaTotal}`, { bold:true, size:10, align:'center' });
 
-  // --- Entidad / registro de entrada (filas 8-11) ---
   mergeSet(ws, 8, 1, 8, 2, 'ENTIDAD PRODUCTORA:', { bold:true, size:9 });
-  mergeSet(ws, 8, 3, 8, 9, entidad, { size:9 });
+  mergeSet(ws, 8, 3, 8, 9, cfg.entidad, { size:9 });
   mergeSet(ws, 8, 10, 8, 13, 'REGISTRO DE ENTRADA', { bold:true, size:9, align:'center' });
 
   mergeSet(ws, 9, 1, 9, 2, 'UNIDAD ADMINISTRATIVA:', { bold:true, size:9 });
-  mergeSet(ws, 9, 3, 9, 9, unidad, { size:9 });
+  mergeSet(ws, 9, 3, 9, 9, cfg.unidad, { size:9 });
   mergeSet(ws, 9, 10, 9, 10, 'AÑO', { bold:true, size:8, align:'center' });
   mergeSet(ws, 9, 11, 9, 11, 'MES', { bold:true, size:8, align:'center' });
   mergeSet(ws, 9, 12, 9, 12, 'DIA', { bold:true, size:8, align:'center' });
   mergeSet(ws, 9, 13, 9, 13, 'N. T.', { bold:true, size:8, align:'center' });
 
   mergeSet(ws, 10, 1, 10, 2, 'OFICINA PRODUCTORA:', { bold:true, size:9 });
-  mergeSet(ws, 10, 3, 10, 9, oficina, { size:9 });
-  mergeSet(ws, 10, 10, 10, 10, ano, { size:9, align:'center' });
-  mergeSet(ws, 10, 11, 10, 11, mes, { size:9, align:'center' });
-  mergeSet(ws, 10, 12, 10, 12, dia, { size:9, align:'center' });
-  mergeSet(ws, 10, 13, 10, 13, nt, { size:9, align:'center' });
+  mergeSet(ws, 10, 3, 10, 9, cfg.oficina, { size:9 });
+  mergeSet(ws, 10, 10, 10, 10, cfg.ano, { size:9, align:'center' });
+  mergeSet(ws, 10, 11, 10, 11, cfg.mes, { size:9, align:'center' });
+  mergeSet(ws, 10, 12, 10, 12, cfg.dia, { size:9, align:'center' });
+  mergeSet(ws, 10, 13, 10, 13, cfg.nt, { size:9, align:'center' });
 
   mergeSet(ws, 11, 1, 11, 2, 'OBJETO:', { bold:true, size:9 });
-  mergeSet(ws, 11, 3, 11, 9, objeto, { size:9 });
+  mergeSet(ws, 11, 3, 11, 9, cfg.objeto, { size:9 });
   mergeSet(ws, 11, 10, 11, 13, 'N. T. = Número de Transferencia', { size:7, italic:true, align:'left' });
 
   borderRange(ws, 8, 1, 11, 13);
 
-  // --- Encabezado de la tabla (filas 13-14) ---
   mergeSet(ws, 13, 1, 14, 1, 'NÚMERO DE ORDEN', { bold:true, align:'center', fill:HEADER_FILL });
   mergeSet(ws, 13, 2, 14, 2, 'CODIGO', { bold:true, align:'center', fill:HEADER_FILL });
   mergeSet(ws, 13, 3, 14, 3, 'Nombre de las Series, subseries o Asuntos', { bold:true, align:'center', fill:HEADER_FILL });
@@ -671,60 +659,35 @@ exportBtn.addEventListener('click', async () => {
   mergeSet(ws, 14, 8, 14, 8, 'Tomo', { bold:true, align:'center', fill:HEADER_FILL });
   mergeSet(ws, 14, 9, 14, 9, 'Otro', { bold:true, align:'center', fill:HEADER_FILL });
 
-  // --- Filas de datos, agrupadas por Serie/Subserie ---
-  const CENTER_COLS = [1,4,5,6,7,8,9,10,11,12];
-  let r = 15;
-  let lastKey = null;
-  let orderNum = 0;
+  return 15; // primera fila libre para datos
+}
 
-  rows.forEach(row => {
-    const serie = (row.serie || '').trim();
-    const parentCode = computeParentCode(row.codigo);
-    const key = parentCode + '||' + serie.toUpperCase();
+const CENTER_COLS = [1,4,5,6,7,8,9,10,11,12];
 
-    if(serie && key !== lastKey){
-      mergeSet(ws, r, 3, r, 13, serie.toUpperCase(), { bold:true, align:'left', fill:CATEGORY_FILL });
-      ws.getRow(r).getCell(2).value = parentCode;
-      ws.getRow(r).getCell(2).font = { size:9 };
-      ws.getRow(r).getCell(2).alignment = { horizontal:'left', vertical:'middle' };
-      ws.getRow(r).getCell(2).fill = CATEGORY_FILL;
-      lastKey = key;
-      r++;
-    }
+// Escribe una fila de datos (orden, codigo, texto en la columna "Nombre...", fechas, caja/carpeta, folios).
+// tomo/otro/soporte/notas quedan siempre vacíos, tal como exige el FUID.
+function writeDataRow(ws, r, { orden, codigo, texto, fechaIni, fechaFin, caja, carpeta, folios, frecuencia, bold }){
+  const xr = ws.getRow(r);
+  xr.getCell(1).value = orden;
+  xr.getCell(2).value = codigo;
+  xr.getCell(3).value = texto;
+  xr.getCell(4).value = fechaIni || '';
+  xr.getCell(5).value = fechaFin || '';
+  xr.getCell(6).value = caja || '';
+  xr.getCell(7).value = carpeta || '';
+  xr.getCell(8).value = '';
+  xr.getCell(9).value = '';
+  xr.getCell(10).value = folios || '';
+  xr.getCell(11).value = '';
+  xr.getCell(12).value = frecuencia || '';
+  xr.getCell(13).value = '';
+  for(let c=1;c<=13;c++){
+    xr.getCell(c).font = { size:9, bold: !!bold };
+    xr.getCell(c).alignment = { horizontal: CENTER_COLS.includes(c) ? 'center' : 'left', vertical:'middle', wrapText:true };
+  }
+}
 
-    orderNum++;
-    const xr = ws.getRow(r);
-    xr.getCell(1).value = orderNum;
-    xr.getCell(2).value = row.codigo;
-    xr.getCell(3).value = row.asunto;
-    xr.getCell(4).value = row.fechaIni;
-    xr.getCell(5).value = row.fechaFin;
-    xr.getCell(6).value = row.caja;
-    xr.getCell(7).value = row.carpeta;
-    xr.getCell(8).value = row.tomo;
-    xr.getCell(9).value = row.otro;
-    xr.getCell(10).value = Number(row.folios) || row.folios || '';
-    xr.getCell(11).value = row.soporte;
-    xr.getCell(12).value = row.frecuencia;
-    xr.getCell(13).value = row.notas;
-    for(let c=1;c<=13;c++){
-      xr.getCell(c).font = { size:9 };
-      xr.getCell(c).alignment = { horizontal: CENTER_COLS.includes(c) ? 'center' : 'left', vertical:'middle', wrapText:true };
-    }
-    r++;
-  });
-
-  const tableEndRow = r - 1;
-  borderRange(ws, 13, 1, tableEndRow, 13);
-
-  // --- Total de folios ---
-  const totalFolios = rows.reduce((sum, row) => sum + (parseInt(row.folios) || 0), 0);
-  mergeSet(ws, r, 8, r, 9, 'Total Folios', { bold:true, align:'right' });
-  mergeSet(ws, r, 10, r, 10, totalFolios, { bold:true, align:'center' });
-  borderRange(ws, r, 1, r, 13);
-  r += 3;
-
-  // --- Firmas ---
+function drawSignatureBlock(ws, r){
   const groupLabels = ['Elaborado por:', 'Entregado por:', 'Recibido por:'];
   const subLabels = ['Cargo:', 'Firma:', 'Lugar:', 'Fecha:'];
   const labelCols = [1, 6, 10];
@@ -739,6 +702,152 @@ exportBtn.addEventListener('click', async () => {
     });
     r++;
   });
+  return r;
+}
+
+// Agrupa filas por Serie (nivel 1) preservando el orden de primera aparición.
+function groupBySerie(items){
+  const order = [];
+  const map = new Map();
+  items.forEach(row => {
+    const serie = (row.serie || '').trim() || 'SIN CLASIFICAR';
+    if(!map.has(serie)){ map.set(serie, []); order.push(serie); }
+    map.get(serie).push(row);
+  });
+  return order.map(serie => ({ serie, items: map.get(serie) }));
+}
+
+// Dentro de una serie, agrupa por Subserie/tipo documental (nivel 2), usando el código como clave.
+function groupBySubserie(items){
+  const order = [];
+  const map = new Map();
+  items.forEach(row => {
+    const codigo = (row.codigo || '').trim();
+    const subserie = (row.subserie || '').trim() || row.asunto || 'Sin tipo documental';
+    const key = codigo + '||' + subserie;
+    if(!map.has(key)){ map.set(key, { codigo, subserie, items: [] }); order.push(key); }
+    map.get(key).items.push(row);
+  });
+  return order.map(key => map.get(key));
+}
+
+exportBtn.addEventListener('click', async () => {
+  if(rows.length === 0) return;
+  exportBtn.disabled = true;
+  processStatus.textContent = 'Generando Excel FUID...';
+
+  const cfg = {
+    entidad: fEntidad.value.trim() || 'EJÉRCITO NACIONAL',
+    unidad: fUnidad.value.trim(),
+    oficina: fOficina.value.trim(),
+    objeto: fObjeto.value.trim() || 'TRANSFERENCIA PRIMARIA',
+    codigoFormato: fCodigoFormato.value.trim() || 'FO-SECEJ-CEAYG-742',
+    version: fVersion.value.trim() || '0',
+    fechaEmision: fFechaEmision.value.trim(),
+    hojaNo: fHojaNo.value.trim() || '1',
+    hojaTotal: fHojaTotal.value.trim() || '1',
+    ano: fAno.value.trim(),
+    mes: fMes.value.trim(),
+    dia: fDia.value.trim(),
+    nt: fNT.value.trim()
+  };
+
+  const wb = new ExcelJS.Workbook();
+  const serieGroups = groupBySerie(rows);
+
+  // ---------- Hoja "FUID GENERAL": una fila agregada por subserie ----------
+  const wsGeneral = wb.addWorksheet('FUID GENERAL', { pageSetup: { orientation: 'landscape', fitToPage: true } });
+  let r = drawFuidHeader(wsGeneral, cfg);
+  let ordenGeneral = 0;
+
+  serieGroups.forEach(({ serie, items }) => {
+    const parentCode = computeParentCode(items[0].codigo);
+    mergeSet(wsGeneral, r, 2, r, 2, parentCode, { align:'left' });
+    mergeSet(wsGeneral, r, 3, r, 13, serie.toUpperCase(), { bold:true, align:'left', fill:CATEGORY_FILL });
+    wsGeneral.getRow(r).getCell(2).fill = CATEGORY_FILL;
+    r++;
+
+    groupBySubserie(items).forEach(({ codigo, subserie, items: subItems }) => {
+      ordenGeneral++;
+      const fechas = subItems.map(it => it.fechaIni).concat(subItems.map(it => it.fechaFin)).filter(Boolean).sort();
+      const folios = subItems.reduce((sum, it) => sum + (parseInt(it.folios) || 0), 0);
+      writeDataRow(wsGeneral, r, {
+        orden: ordenGeneral,
+        codigo,
+        texto: subserie,
+        fechaIni: fechas[0] || subItems[0].fechaIni,
+        fechaFin: fechas[fechas.length - 1] || subItems[0].fechaFin,
+        caja: subItems[0].caja,
+        carpeta: subItems[0].carpeta,
+        folios,
+        frecuencia: subItems[0].frecuencia || 'Media'
+      });
+      r++;
+    });
+  });
+
+  const generalEndRow = r - 1;
+  borderRange(wsGeneral, 13, 1, generalEndRow, 13);
+
+  const totalFoliosGeneral = rows.reduce((sum, row) => sum + (parseInt(row.folios) || 0), 0);
+  mergeSet(wsGeneral, r, 8, r, 9, 'Total Folios', { bold:true, align:'right' });
+  mergeSet(wsGeneral, r, 10, r, 10, totalFoliosGeneral, { bold:true, align:'center' });
+  borderRange(wsGeneral, r, 1, r, 13);
+  r += 3;
+  drawSignatureBlock(wsGeneral, r);
+
+  // ---------- Una hoja por Serie, con el detalle de cada documento individual ----------
+  const usedNames = new Set(['FUID GENERAL']);
+  serieGroups.forEach(({ serie, items }) => {
+    const parentCode = computeParentCode(items[0].codigo);
+    let sheetName = sanitizeSheetName(`${parentCode} ${serie}`.trim());
+    let suffix = 2;
+    while(usedNames.has(sheetName)){
+      sheetName = sanitizeSheetName(`${parentCode} ${serie}`.trim()).slice(0, 28) + ' ' + suffix++;
+    }
+    usedNames.add(sheetName);
+
+    const ws = wb.addWorksheet(sheetName, { pageSetup: { orientation: 'landscape', fitToPage: true } });
+    let rr = drawFuidHeader(ws, cfg);
+
+    mergeSet(ws, rr, 2, rr, 2, parentCode, { align:'left' });
+    mergeSet(ws, rr, 3, rr, 13, serie.toUpperCase(), { bold:true, align:'left', fill:CATEGORY_FILL });
+    ws.getRow(rr).getCell(2).fill = CATEGORY_FILL;
+    rr++;
+
+    let ordenDetalle = 0;
+    groupBySubserie(items).forEach(({ codigo, subserie, items: subItems }) => {
+      mergeSet(ws, rr, 2, rr, 2, codigo, { align:'left' });
+      mergeSet(ws, rr, 3, rr, 13, subserie, { bold:true, align:'left' });
+      rr++;
+
+      subItems.forEach(item => {
+        ordenDetalle++;
+        writeDataRow(ws, rr, {
+          orden: ordenDetalle,
+          codigo: '',
+          texto: item.asunto,
+          fechaIni: item.fechaIni,
+          fechaFin: item.fechaFin,
+          caja: item.caja,
+          carpeta: item.carpeta,
+          folios: item.folios,
+          frecuencia: item.frecuencia || 'Media'
+        });
+        rr++;
+      });
+    });
+
+    const detailEndRow = rr - 1;
+    borderRange(ws, 13, 1, detailEndRow, 13);
+
+    const totalFoliosDetalle = items.reduce((sum, it) => sum + (parseInt(it.folios) || 0), 0);
+    mergeSet(ws, rr, 8, rr, 9, 'Total Folios', { bold:true, align:'right' });
+    mergeSet(ws, rr, 10, rr, 10, totalFoliosDetalle, { bold:true, align:'center' });
+    borderRange(ws, rr, 1, rr, 13);
+    rr += 3;
+    drawSignatureBlock(ws, rr);
+  });
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -752,7 +861,7 @@ exportBtn.addEventListener('click', async () => {
   a.remove();
   URL.revokeObjectURL(url);
 
-  processStatus.textContent = 'Excel FUID generado correctamente.';
+  processStatus.textContent = `Excel FUID generado: ${wb.worksheets.length} hojas (FUID GENERAL + ${serieGroups.length} serie(s)).`;
   exportBtn.disabled = false;
 });
 
